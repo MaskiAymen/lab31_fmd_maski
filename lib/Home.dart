@@ -1,143 +1,188 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
-import 'package:camera/camera.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:tflite/tflite.dart';
 
-class Home extends StatefulWidget {
-  const Home({Key? key}) : super(key: key);
-
+class HomePage extends StatefulWidget {
   @override
-  State<Home> createState() => _HomeState();
+  _HomePageState createState() => _HomePageState();
 }
 
-class _HomeState extends State<Home> {
-  late CameraController _cameraController;
-  bool isDetecting = false;
+class _HomePageState extends State<HomePage> {
+  bool loading = true;
+  File? _image;
   List? _output;
-  bool isLoadingModel = true;
+  final imagePicker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
-    initModel();
-    initCamera();
-  }
-
-  Future<void> initModel() async {
-    try {
-      await Tflite.loadModel(
-        model: 'assets/model.tflite',
-        labels: 'assets/labels.txt',
-      );
-      setState(() {
-        isLoadingModel = false;
-      });
-    } catch (e) {
-      print('Failed to load model: $e');
-      // Handle model loading failure
-    }
-  }
-
-  Future<void> initCamera() async {
-    final cameras = await availableCameras();
-    //final firstCamera = cameras.first;
-
-    _cameraController = CameraController(
-      cameras.last,
-      ResolutionPreset.medium,
-    );
-
-    await _cameraController.initialize();
-
-    _cameraController.startImageStream((CameraImage image) {
-      if (!isDetecting) {
-        isDetecting = true;
-        detectImage(image);
-      }
+    loadModel().then((value) {
+      setState(() {});
     });
   }
 
-  Future<void> detectImage(CameraImage image) async {
-    var prediction = await Tflite.runModelOnFrame(
-      bytesList: image.planes.map((plane) => plane.bytes).toList(),
-      imageHeight: image.height,
-      imageWidth: image.width,
+  detectImage(File image) async {
+    var prediction = await Tflite.runModelOnImage(
+      path: image.path,
       numResults: 2,
       threshold: 0.6,
+      imageMean: 127.5,
+      imageStd: 127.5,
     );
 
     setState(() {
-      _output = prediction!;
-      isDetecting = false;
+      _output = prediction;
+      loading = false;
     });
   }
 
-  void takePhoto() async {
-    if (_cameraController.value.isInitialized) {
-      XFile? image = await _cameraController.takePicture();
-      if (image != null) {
-        detectImage(File(image.path).readAsBytesSync() as CameraImage);
-      }
-    }
-  }
-
-  Widget buildOutputContainer(String text) {
-    return Container(
-      padding: EdgeInsets.all(10),
-      color: Colors.black,
-      child: Text(
-        text,
-        style: TextStyle(fontSize: 20, color: Colors.white),
-      ),
+  loadModel() async {
+    await Tflite.loadModel(
+      model: 'assets/model_unquant.tflite',
+      labels: 'assets/labels.txt',
     );
-  }
-
-  Widget buildDetectionResults() {
-    if (_output != null && _output!.isNotEmpty) {
-      return Column(
-        children: [
-          buildOutputContainer(
-            'Detect: ${_output![0]['label'].toString().substring(2)}',
-          ),
-          buildOutputContainer(
-            'Confidence: ${(_output![0]['confidence']).toString()}',
-          ),
-        ],
-      );
-    } else {
-      return Container(); // Empty container if there are no detection results
-    }
   }
 
   @override
   void dispose() {
-    _cameraController.stopImageStream();
-    _cameraController.dispose();
     Tflite.close();
     super.dispose();
   }
 
+  pickImageCamera() async {
+    var image = await imagePicker.pickImage(source: ImageSource.camera);
+    if (image == null) {
+      return null;
+    } else {
+      setState(() {
+        _image = File(image.path);
+      });
+    }
+    detectImage(_image!);
+  }
+
+  pickImageGallery() async {
+    var image = await imagePicker.pickImage(source: ImageSource.gallery);
+    if (image == null) {
+      return null;
+    } else {
+      setState(() {
+        _image = File(image.path);
+      });
+    }
+    detectImage(_image!);
+  }
+
   @override
   Widget build(BuildContext context) {
+    var h = MediaQuery.of(context).size.height;
+    var w = MediaQuery.of(context).size.width;
     return Scaffold(
       appBar: AppBar(
-        title: Text('Face Detection'),
+        title: Text(
+          'ML Classifier',
+          style: GoogleFonts.roboto(),
+        ),
       ),
-      body: Stack(
-        children: [
-          CameraPreview(_cameraController),
-          if (isLoadingModel)
-            Center(
-              child: CircularProgressIndicator(),
+      body: Container(
+        height: h,
+        width: w,
+        child: Column(
+          children: [
+            Container(
+              height: 150,
+              width: 150,
+              padding: EdgeInsets.all(10),
+              child: Image.asset('assets/mask.png'),
             ),
-          buildDetectionResults(), // Display detection results
-        ],
+            Container(
+              child: Text(
+                'Mask Detector',
+                style: GoogleFonts.roboto(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            SizedBox(height: 50),
+            Container(
+              child: Column(
+                children: [
+                  Container(
+                    padding: EdgeInsets.only(left: 10, right: 10),
+                    height: 50,
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        primary: Colors.teal[800],
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: () {
+                        pickImageCamera();
+                      },
+                      child: Text(
+                        'Capture',
+                        style: GoogleFonts.roboto(fontSize: 18),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                  Container(
+                    padding: EdgeInsets.only(left: 10, right: 10),
+                    height: 50,
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        primary: Colors.teal[800],
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: () {
+                        pickImageGallery();
+                      },
+                      child: Text(
+                        'Gallery',
+                        style: GoogleFonts.roboto(fontSize: 18),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (!loading)
+              Container(
+                child: Column(
+                  children: [
+                    Container(
+                      height: 220,
+                      // width: double.infinity,
+                      padding: EdgeInsets.all(15),
+                      child: Image.file(_image!),
+                    ),
+                    if (_output != null)
+                      Text(
+                        _output![0]['label'].toString().substring(2),
+                        style: GoogleFonts.roboto(fontSize: 18),
+                      ),
+                    if (_output != null)
+                      Text(
+                        'Confidence: ' + _output![0]['confidence'].toString(),
+                        style: GoogleFonts.roboto(fontSize: 18),
+                      ),
+                  ],
+                ),
+              )
+            else
+              Container(),
+          ],
+        ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: takePhoto,
-        child: Icon(Icons.camera_alt),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 }
