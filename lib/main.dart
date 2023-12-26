@@ -20,9 +20,11 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'MASK DETECTOR',
       theme: ThemeData(
         primarySwatch: Colors.teal,
