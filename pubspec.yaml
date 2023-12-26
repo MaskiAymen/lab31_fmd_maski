@@ -40,8 +40,9 @@ dependencies:
   camera: ^0.10.5
   google_fonts: ^6.1.0
   bloc: ^7.0.0
-  equatable: ^2.0.3
-  flutter_bloc: ^7.0.0
+  equatable: ^2.0.2
+  flutter_bloc: ^7.3.1
+
 
 dev_dependencies:
   flutter_test:
